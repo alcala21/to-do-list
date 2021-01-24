@@ -29,14 +29,18 @@ class ToDo:
             1: "Today's tasks",
             2: "Week's tasks",
             3: "All tasks",
-            4: "Add task",
+            4: "Missed tasks",
+            5: "Add task",
+            6: "Delete task",
             0: "Exit"
         }
         self.functions = {
             1: self.show_today_tasks,
             2: self.show_week_tasks,
             3: self.all_tasks,
-            4: self.add_task,
+            4: self.missed_tasks,
+            5: self.add_task,
+            6: self.delete_task,
             0: self.exit
         }
         self.action_id = None
@@ -57,8 +61,9 @@ class ToDo:
         print('\n')
         self.action_id = int(selection) if selection.isnumeric() else -1
 
-        if self.action_id in range(5):
+        if self.action_id in range(len(self.functions)):
             self.functions[self.action_id]()
+            print('\n')
 
     def exit(self):
         print('Bye!')
@@ -69,17 +74,25 @@ class ToDo:
         if is_today:
             day_name = 'Today'
 
+        message = f"{day_name} {_date.day} {_date.strftime('%b')}:"
+
         rows = self.session.query(Table) \
             .filter(Table.deadline == _date).all()
 
-        print(f"{day_name} {_date.day} {_date.strftime('%b')}")
+        self.print_tasks(rows, message=message, include_date=False)
 
-        if len(rows) == 0:
-            print('Nothing to do!')
+    def print_tasks(self, tasks, message,
+                    message_if_empty="Nothing to do!",
+                    include_date=True):
+        print(message)
+        if len(tasks) == 0:
+            print(message_if_empty)
         else:
-            for i, row in enumerate(rows):
-                print(f"{i + 1}. {row}")
-        print('\n')
+            for i, row in enumerate(tasks):
+                if include_date:
+                    print(f"{i + 1}. {row.task}. {row.deadline.day} {row.deadline.strftime('%b')}")
+                else:
+                    print(f"{i + 1}. {row.task}.")
 
     def show_today_tasks(self):
         self.show_date_tasks(datetime.today().date(), True)
@@ -89,16 +102,11 @@ class ToDo:
         for day_shift in range(7):
             new_day = today + timedelta(day_shift)
             self.show_date_tasks(new_day)
+            print('\n')
 
     def all_tasks(self):
         rows = self.session.query(Table).order_by(Table.deadline).all()
-        if len(rows) == 0:
-            print('Nothing to do!')
-        else:
-            print('All tasks:')
-            for i, row in enumerate(rows):
-                print(f"{i + 1}. {row.task}. {row.deadline.day} {row.deadline.strftime('%b')}")
-        print('\n')
+        self.print_tasks(rows, "All tasks:")
 
     def add_task(self):
         new_task = input('Enter task' + '\n')
@@ -107,8 +115,27 @@ class ToDo:
                         deadline=datetime.strptime(task_deadline, "%Y-%m-%d"))
         self.session.add(new_row)
         self.session.commit()
+        print('The task has been added!')
 
-        print('The task has been added!', '\n')
+    def missed_tasks(self):
+        _date = datetime.today().date()
+        rows = self.session.query(Table) \
+            .filter(Table.deadline < _date).order_by(Table.deadline).all()
+        self.print_tasks(rows, "Missed tasks:", message_if_empty="Nothing is missed!")
+
+    def delete_task(self):
+        rows = self.session.query(Table).order_by(Table.deadline).all()
+        message = "Choose the number of the task you want to delete:"
+        self.print_tasks(rows, message)
+        index_str = input("")
+        if index_str.isnumeric():
+            task_index = int(index_str)
+        else:
+            task_index = len(rows) + 1
+        if task_index <= len(rows):
+            self.session.delete(rows[task_index - 1])
+            self.session.commit()
+            print('The task has been deleted!')
 
 
 myToDo = ToDo()
